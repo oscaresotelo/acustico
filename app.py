@@ -15,50 +15,259 @@ from scipy.signal import find_peaks, butter, sosfiltfilt
 from scipy.ndimage import uniform_filter1d, median_filter
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Configuración inicial de Streamlit
 # ══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="PhonLab Pro", page_icon="🎙️",
                    layout="wide", initial_sidebar_state="expanded")
 
+# CSS Limpio y Seguro (No rompe los elementos estructurales de la barra lateral de Streamlit)
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap');
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif;background:#0d0d0f;color:#e8e6e0;}
-.stApp{background:#0d0d0f;}
-h1,h2,h3,h4{font-family:'Space Mono',monospace;color:#e8e6e0;}
-.title{font-family:'Space Mono',monospace;font-size:2.1rem;font-weight:700;color:#f5f0e8;letter-spacing:-2px;}
-.subtitle{font-size:0.78rem;color:#5a5a6a;letter-spacing:3px;text-transform:uppercase;}
-.accent{color:#c8ff57;}
-.mc{background:#16161a;border:1px solid #2a2a35;border-radius:8px;padding:13px 17px;margin:5px 0;}
-.mc:hover{border-color:#c8ff57;}
-.ml{font-family:'Space Mono',monospace;font-size:0.6rem;color:#5a5a6a;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px;}
-.mv{font-family:'Space Mono',monospace;font-size:1.2rem;font-weight:700;color:#c8ff57;}
-.mu{font-size:0.68rem;color:#5a5a6a;margin-left:3px;}
-.wc{background:#1a1510;border:1px solid #f07020;border-radius:8px;padding:13px 17px;margin:5px 0;}
-.wl{font-family:'Space Mono',monospace;font-size:0.6rem;color:#f07020;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px;}
-.wv{font-family:'Space Mono',monospace;font-size:1.2rem;font-weight:700;color:#f07020;}
-.gc{background:#0f1a10;border:1px solid #3a6a3a;border-radius:8px;padding:13px 17px;margin:5px 0;}
-.gl{font-family:'Space Mono',monospace;font-size:0.6rem;color:#3a8a3a;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px;}
-.gv{font-family:'Space Mono',monospace;font-size:1.2rem;font-weight:700;color:#57ff57;}
-/* Diagnóstico */
-.diag-normal{background:#0f1a10;border:2px solid #57ff57;border-radius:10px;padding:18px 22px;margin:10px 0;}
-.diag-leve{background:#1a1a08;border:2px solid #ffff44;border-radius:10px;padding:18px 22px;margin:10px 0;}
-.diag-moderado{background:#1a1008;border:2px solid #f07020;border-radius:10px;padding:18px 22px;margin:10px 0;}
-.diag-severo{background:#1a0808;border:2px solid #ff4444;border-radius:10px;padding:18px 22px;margin:10px 0;}
-.diag-title{font-family:'Space Mono',monospace;font-size:0.75rem;color:#9a9aaa;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
-.diag-result{font-family:'Space Mono',monospace;font-size:1.1rem;font-weight:700;margin-bottom:4px;}
-.diag-detail{font-size:0.82rem;color:#9a9aaa;line-height:1.5;}
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght=400;700&family=DM+Sans:wght=300;400;600&display=swap');
+
+/* Aplicar tipografía y fondos generales */
+html, body, [data-testid="stAppViewContainer"] {
+    font-family: 'DM Sans', sans-serif;
+    background-color: #0d0d0f;
+    color: #e8e6e0;
+}
+
+.stApp {
+    background-color: #0d0d0f;
+}
+
+h1, h2, h3, h4 {
+    font-family: 'Space Mono', monospace;
+    color: #e8e6e0;
+}
+
+.title {
+    font-family: 'Space Mono', monospace;
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: #f5f0e8;
+    letter-spacing: -2px;
+}
+
+.subtitle {
+    font-size: 0.78rem;
+    color: #5a5a6a;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+.accent {
+    color: #c8ff57;
+}
+
+/* Tarjetas y bloques informativos */
+.mc {
+    background: #16161a;
+    border: 1px solid #2a2a35;
+    border-radius: 8px;
+    padding: 13px 17px;
+    margin: 5px 0;
+}
+.mc:hover {
+    border-color: #c8ff57;
+}
+
+.ml {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: #5a5a6a;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 3px;
+}
+
+.mv {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #c8ff57;
+}
+
+.mu {
+    font-size: 0.68rem;
+    color: #5a5a6a;
+    margin-left: 3px;
+}
+
+.wc {
+    background: #1a1510;
+    border: 1px solid #f07020;
+    border-radius: 8px;
+    padding: 13px 17px;
+    margin: 5px 0;
+}
+
+.wl {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: #f07020;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 3px;
+}
+
+.wv {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f07020;
+}
+
+.gc {
+    background: #0f1a10;
+    border: 1px solid #3a6a3a;
+    border-radius: 8px;
+    padding: 13px 17px;
+    margin: 5px 0;
+}
+
+.gl {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: #3a8a3a;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 3px;
+}
+
+.gv {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #57ff57;
+}
+
+/* Diagnóstico Clínico Estilos */
+.diag-normal { background: #0f1a10; border: 2px solid #57ff57; border-radius: 10px; padding: 18px 22px; margin: 10px 0; }
+.diag-leve { background: #1a1a08; border: 2px solid #ffff44; border-radius: 10px; padding: 18px 22px; margin: 10px 0; }
+.diag-moderado { background: #1a1008; border: 2px solid #f07020; border-radius: 10px; padding: 18px 22px; margin: 10px 0; }
+.diag-severo { background: #1a0808; border: 2px solid #ff4444; border-radius: 10px; padding: 18px 22px; margin: 10px 0; }
+
+.diag-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: #9a9aaa;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+}
+
+.diag-result {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.diag-detail {
+    font-size: 0.82rem;
+    color: #9a9aaa;
+    line-height: 1.5;
+}
+
 /* TextGrid */
-.tg-tier{background:#111115;border:1px solid #2a2a35;border-radius:6px;padding:10px 14px;margin:4px 0;font-family:'Space Mono',monospace;font-size:0.78rem;}
-.tg-label{color:#c8ff57;font-size:0.65rem;text-transform:uppercase;letter-spacing:2px;}
-section[data-testid="stSidebar"]{background:#111115;border-right:1px solid #1e1e28;}
-.stTabs [data-baseweb="tab-list"]{background:#111115;border-radius:8px;padding:3px;gap:2px;border:1px solid #1e1e28;flex-wrap:wrap;}
-.stTabs [data-baseweb="tab"]{font-family:'Space Mono',monospace;font-size:0.62rem;letter-spacing:.5px;text-transform:uppercase;color:#5a5a6a;border-radius:5px;padding:7px 11px;}
-.stTabs [aria-selected="true"]{background:#c8ff57!important;color:#0d0d0f!important;}
-[data-testid="stFileUploadDropzone"]{background:#111115;border:1px dashed #2a2a35;border-radius:8px;}
-.sdiv{border:none;border-top:1px solid #1e1e28;margin:16px 0;}
-.ibox{background:#111115;border-left:3px solid #c8ff57;border-radius:0 8px 8px 0;padding:10px 14px;margin:8px 0;font-size:0.82rem;color:#9a9aaa;}
-.wbox{background:#1a1208;border-left:3px solid #f07020;border-radius:0 8px 8px 0;padding:10px 14px;margin:8px 0;font-size:0.82rem;color:#9a9aaa;}
-#MainMenu,footer,header{visibility:hidden;}
+.tg-tier {
+    background: #111115;
+    border: 1px solid #2a2a35;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 4px 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+}
+
+.tg-label {
+    color: #c8ff57;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+/* Estilos Robustos para la Barra Lateral (Sidebar) sin romper su visualización */
+[data-testid="stSidebar"] {
+    background-color: #111115 !important;
+    border-right: 1px solid #1e1e28;
+}
+
+/* Ajustes de tipografías y elementos en barra lateral */
+[data-testid="stSidebar"] * {
+    color: #e8e6e0;
+}
+
+[data-testid="stSidebar"] .stWidgetLabel p {
+    color: #9a9aaa !important;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+}
+
+/* Estilos de pestañas (Tabs) */
+.stTabs [data-baseweb="tab-list"] {
+    background: #111115;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    border: 1px solid #1e1e28;
+    flex-wrap: wrap;
+}
+
+.stTabs [data-baseweb="tab"] {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: #5a5a6a;
+    border-radius: 5px;
+    padding: 7px 11px;
+}
+
+.stTabs [aria-selected="true"] {
+    background: #c8ff57 !important;
+    color: #0d0d0f !important;
+}
+
+/* Caja de subida de archivos */
+[data-testid="stFileUploadDropzone"] {
+    background: #111115;
+    border: 1px dashed #2a2a35;
+    border-radius: 8px;
+}
+
+.sdiv {
+    border: none;
+    border-top: 1px solid #1e1e28;
+    margin: 16px 0;
+}
+
+.ibox {
+    background: #111115;
+    border-left: 3px solid #c8ff57;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-size: 0.82rem;
+    color: #9a9aaa;
+}
+
+.wbox {
+    background: #1a1208;
+    border-left: 3px solid #f07020;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-size: 0.82rem;
+    color: #9a9aaa;
+}
+
+/* Ocultar ÚNICAMENTE el menú de opciones de desarrollo y el footer, preservando el header del sidebar */
+[data-testid="stToolbar"], footer {
+    visibility: hidden !important;
+    height: 0px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -78,6 +287,7 @@ def load_audio(file_bytes, suffix):
     Carga el archivo de audio de forma segura desde bytes en memoria,
     creando un archivo temporal para que librosa/soundfile pueda leerlo
     manteniendo la frecuencia de muestreo nativa (sr=None).
+    Soporta formatos estándar de iPhone/iOS (.m4a, .caf, .aac, .mp4).
     """
     import tempfile
     import os
@@ -95,6 +305,16 @@ def load_audio(file_bytes, suffix):
         if len(y.shape) > 1:
             y = librosa.to_mono(y)
             
+    except Exception as e:
+        # Mensaje de retroalimentación amigable si falta FFmpeg en el sistema para archivos AAC/M4A
+        error_msg = str(e)
+        friendly_msg = (
+            "No se pudo decodificar el archivo de audio. Si estás subiendo una grabación de iPhone "
+            "(.m4a, .caf, .aac) y tu servidor de Streamlit está en Linux o Windows, por favor asegúrate de "
+            "que el sistema tenga instalado 'ffmpeg'. Como alternativa rápida, puedes exportar la grabación "
+            "a formato .wav antes de cargarla."
+        )
+        raise RuntimeError(f"{friendly_msg}\n\n[Detalle técnico]: {error_msg}")
     finally:
         # Limpiar de inmediato el archivo temporal del disco duro
         if os.path.exists(tmp_path):
@@ -890,8 +1110,8 @@ def gauge_plot(value,title,thr,mx,unit="%",bad_high=True):
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 🎙️ Archivo")
-    uploaded=st.file_uploader("WAV · MP3 · FLAC · OGG · M4A",
-                               type=["wav","mp3","flac","ogg","m4a"])
+    uploaded=st.file_uploader("WAV · MP3 · FLAC · OGG · M4A · CAF · AAC",
+                               type=["wav","mp3","flac","ogg","m4a","caf","aac","mp4"])
     
     st.markdown("### 🗣️ Perfil del Hablante")
     profile_sel = st.selectbox("Preset de F0", ["Adulto (General)", "Femenino / Infantil", "Masculino / Agudo", "Personalizado"])
@@ -935,7 +1155,7 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════
 if not uploaded:
     st.markdown("""<div class="ibox">
-    Cargá un archivo de audio. Soporta <b>WAV · MP3 · FLAC · OGG · M4A</b>.<br>
+    Cargá un archivo de audio. Soporta <b>WAV · MP3 · FLAC · OGG · M4A · CAF · AAC</b>.<br>
     Análisis clínico y lingüístico robusto de precisión con filtros adaptativos de $F_0$ basados en Praat.
     </div>""", unsafe_allow_html=True)
     feats=[
@@ -968,7 +1188,11 @@ if not uploaded:
 # LOAD AUDIO
 # ══════════════════════════════════════════════════════════════════════════════
 uploaded.seek(0); fb=uploaded.read(); suf=os.path.splitext(uploaded.name)[-1]
-with st.spinner("Cargando audio..."): y_raw,sr=load_audio(fb,suf)
+try:
+    with st.spinner("Cargando audio..."): y_raw,sr=load_audio(fb,suf)
+except Exception as e:
+    st.error(f"❌ Error de Carga: {str(e)}")
+    st.stop()
 
 duration=len(y_raw)/sr
 times_full=np.linspace(0.0,duration,len(y_raw))
@@ -1252,7 +1476,7 @@ with tab_jit:
         st.markdown(f"""
         <div class="wbox">
           <b>⚠️ Habla Continua / Fluida Detectada en la Muestra</b><br>
-          Los parámetros de perturbación glótica como el $\\text{{Jitter}}$ ($3.297\\%$) y el $\\text{{Shimmer}}$ ($8.005\\%$) 
+          Los parámetros de perturbación glótica como el $\\text{{Jitter}}$ y el $\\text{{Shimmer}}$ 
           calculados corresponden a un tramo conversacional continuo. En fonoaudiología clínica, estas métricas 
           <b>carecen de validez en el habla continua</b> debido a la modulación melódica natural de las frases y la sonorización de consonantes.
           <br><br>
