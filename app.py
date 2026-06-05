@@ -1130,9 +1130,10 @@ def gauge_plot(value,title,thr,mx,unit="%",bad_high=True):
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("### 🎙️ Archivo")
-    uploaded=st.file_uploader("WAV · MP3 · FLAC · OGG · M4A · CAF · AAC",
-                               type=["wav","mp3","flac","ogg","m4a","caf","aac","mp4"])
+    st.markdown("### 🎙️ Archivos de Entrada")
+    uploaded=st.file_uploader("Subir uno o más audios (WAV · MP3 · FLAC · M4A)",
+                               type=["wav","mp3","flac","ogg","m4a","caf","aac","mp4"],
+                               accept_multiple_files=True)
     
     st.markdown("### 🗣️ Perfil del Hablante")
     profile_sel = st.selectbox("Preset de F0", ["Adulto (General)", "Femenino / Infantil", "Masculino / Agudo", "Personalizado"])
@@ -1168,15 +1169,13 @@ with st.sidebar:
     st.markdown("### ⚙️ Sílabas / Pausas")
     syl_mingap=st.slider("Separación mín. sílabas (ms)",50,300,100,10)
     sil_db    =st.slider("Umbral de silencio (dB)",   -60,-20,-35,1)
-    if uploaded:
-        uploaded.seek(0); st.audio(uploaded)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # WELCOME
 # ══════════════════════════════════════════════════════════════════════════════
 if not uploaded:
     st.markdown("""<div class="ibox">
-    Cargá un archivo de audio. Soporta <b>WAV · MP3 · FLAC · OGG · M4A · CAF · AAC</b>.<br>
+    Cargá uno o más archivos de audio. Soporta <b>WAV · MP3 · FLAC · OGG · M4A · CAF · AAC</b>.<br>
     Análisis clínico y lingüístico robusto de precisión con filtros adaptativos de $F_0$ basados en Praat.
     </div>""", unsafe_allow_html=True)
     feats=[
@@ -1192,8 +1191,8 @@ if not uploaded:
         ("📋","TextGrid","Exportación compatible con Praat"),
         ("🎛","MFCC","Coeficientes + Δ + ΔΔ"),
         ("🔬","Momentos Espectrales","Centroide, flatness, skewness, kurtosis"),
-        ("✂️","Filtros","Butterworth paso bajo/alto/banda/notch"),
-        ("📁","Exportar","CSV + TextGrid + audio filtrado"),
+        ("✂️","Filtros y Síntesis","Butterworth paso bajo/alto/banda/notch + Resíntesis Pitch/Time"),
+        ("📁","Lotes / Exportar","Procesar múltiples audios juntos en segundos + exportación CSV"),
     ]
     cols=st.columns(4)
     for i,(ico,name,desc) in enumerate(feats):
@@ -1206,9 +1205,30 @@ if not uploaded:
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LOAD AUDIO
+# SELECCIÓN Y CONTROL DE ARCHIVOS MÚLTIPLES (BATCH SCRIPTING EQUIVALENT)
 # ══════════════════════════════════════════════════════════════════════════════
-uploaded.seek(0); fb=uploaded.read(); suf=os.path.splitext(uploaded.name)[-1]
+active_file_idx = 0
+if len(uploaded) > 1:
+    filenames = [f.name for f in uploaded]
+    with st.sidebar:
+        st.markdown("### 📂 Selector de Archivo Activo")
+        sel_name = st.selectbox("Analizar visualmente:", filenames)
+        active_file_idx = filenames.index(sel_name)
+        
+        # Audio reproductor lateral
+        uploaded[active_file_idx].seek(0)
+        st.audio(uploaded[active_file_idx])
+else:
+    with st.sidebar:
+        uploaded[0].seek(0)
+        st.audio(uploaded[0])
+
+uploaded_active = uploaded[active_file_idx]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LOAD ACTIVE AUDIO
+# ══════════════════════════════════════════════════════════════════════════════
+uploaded_active.seek(0); fb=uploaded_active.read(); suf=os.path.splitext(uploaded_active.name)[-1]
 try:
     with st.spinner("Cargando audio..."): y_raw,sr=load_audio(fb,suf)
 except Exception as e:
@@ -1219,16 +1239,70 @@ duration=len(y_raw)/sr
 times_full=np.linspace(0.0,duration,len(y_raw))
 rms_g=float(np.sqrt(np.mean(y_raw**2)))
 
-# Info bar
+# Barra informativa unificada
 c1,c2,c3,c4,c5=st.columns(5)
-c1.markdown(mc("Archivo",uploaded.name[:22],""),unsafe_allow_html=True)
+c1.markdown(mc("Archivo Activo",uploaded_active.name[:22],""),unsafe_allow_html=True)
 c2.markdown(mc("Duración",f"{duration:.2f}","s"),unsafe_allow_html=True)
 c3.markdown(mc("Fs",f"{sr:,}","Hz"),unsafe_allow_html=True)
 c4.markdown(mc("Muestras",f"{len(y_raw):,}","pts"),unsafe_allow_html=True)
 c5.markdown(mc("RMS",f"{20*np.log10(rms_g+1e-9):.1f}","dBFS"),unsafe_allow_html=True)
 st.markdown("<hr class='sdiv'>",unsafe_allow_html=True)
 
-# Time range
+# ══════════════════════════════════════════════════════════════════════════════
+# PROCESAMIENTO POR LOTES (AUTOMATED BATCH PROCESSING - SCRIPTING DE PRAAT)
+# ══════════════════════════════════════════════════════════════════════════════
+if len(uploaded) > 1:
+    with st.expander("📊 PROCESAMIENTO POR LOTES AUTOMÁTICO (Praat Scripting-equivalent)", expanded=False):
+        st.markdown(f"""
+        Esta sección simula el **entorno de Scripting de Praat**. Puedes procesar automáticamente los **{len(uploaded)} archivos** 
+        cargados usando los parámetros de $F_0$ seleccionados en la barra lateral y descargar un reporte CSV unificado al instante.
+        """)
+        if st.button("🚀 Iniciar Procesamiento de todos los archivos cargados"):
+            batch_results = []
+            progress_bar = st.progress(0)
+            for idx, file_obj in enumerate(uploaded):
+                file_obj.seek(0)
+                bytes_data = file_obj.read()
+                suf_b = os.path.splitext(file_obj.name)[-1]
+                try:
+                    y_b, sr_b = load_audio(bytes_data, suf_b)
+                    vm_b = voice_quality(y_b, sr_b, f0_min, f0_max_p, hop_ms=5.0, thr=pitch_thr)
+                    la_b = linguistic_analysis(y_b, sr_b, f0_min, f0_max_p)
+                    sm_b = spectral_moments(y_b, sr_b)
+                    stype_b = classify_speech_type(y_b, sr_b, vm_b, la_b)
+                    sev_b = severity_level(vm_b, stype_b)
+                    
+                    batch_results.append({
+                        "Archivo": file_obj.name,
+                        "Duración (s)": f"{len(y_b)/sr_b:.2f}",
+                        "F0 Media (Hz)": fmt(vm_b['f0_mean'],1),
+                        "F0 SD (Hz)": fmt(vm_b['f0_sd'],1),
+                        "Jitter Local (%)": fmt(vm_b['jitter_local'],3),
+                        "Shimmer Local (%)": fmt(vm_b['shimmer_local'],3),
+                        "HNR (dB)": fmt(vm_b['hnr'],2),
+                        "CPP (dB)": fmt(vm_b['cpp'],2),
+                        "Severidad Acústica": sev_b.upper(),
+                        "Modo de Fonación": stype_b,
+                        "Velocidad de Habla (sil/s)": fmt(la_b['speech_rate'],2),
+                        "Cantidad Pausas": la_b['n_pauses'],
+                        "Centroide Espectral (Hz)": fmt(sm_b['centroid'],0)
+                    })
+                except Exception as ex:
+                    batch_results.append({
+                        "Archivo": file_obj.name,
+                        "Error": str(ex)
+                    })
+                progress_bar.progress((idx + 1) / len(uploaded))
+            
+            df_batch = pd.DataFrame(batch_results)
+            st.success("✓ Procesamiento por lotes completado con éxito.")
+            st.dataframe(df_batch, use_container_width=True)
+            st.download_button("⬇ Descargar Base de Datos Consolidada (CSV)", 
+                               df_batch.to_csv(index=False), 
+                               "base_datos_voz_lotes.csv", "text/csv")
+            st.markdown("<hr class='sdiv'>", unsafe_allow_html=True)
+
+# Time range selector
 with st.expander("🔍 Seleccionar rango de tiempo",expanded=False):
     t_range=st.slider("Rango (s)",0.0,float(duration),(0.0,float(duration)),
                       step=0.01,format="%.2f s")
@@ -1240,7 +1314,6 @@ y_sel=y_raw[i0:i1]; t_sel=times_full[i0:i1]
 # DATA CLASSIFICATION CORE
 # ══════════════════════════════════════════════════════════════════════════════
 with st.spinner("Inicializando motores de calibración acústica..."):
-    # Pre-calcular calidad de voz y análisis lingüístico básico para clasificar la muestra
     vm_init = voice_quality(y_sel, sr, f0_min, f0_max_p, hop_ms=5.0, thr=pitch_thr)
     la_init = linguistic_analysis(y_sel, sr, f0_min, f0_max_p)
     speech_type = classify_speech_type(y_sel, sr, vm_init, la_init)
@@ -1253,7 +1326,7 @@ with st.spinner("Inicializando motores de calibración acústica..."):
  tab_spec2,tab_filt,tab_exp)=st.tabs([
     "〰 ONDA","🌈 ESPECTRO","🎵 PITCH","📊 INTENSIDAD","🗣 FORMANTES",
     "🐚 COCLEO","📐 JITTER/HNR","🧠 DIAGNÓSTICO","🔤 LINGÜÍSTICO","🎛 MFCC",
-    "🔬 ESPECTRAL","✂️ FILTROS","📁 EXPORTAR",
+    "🔬 ESPECTRAL","✂️ FILTROS Y SÍNTESIS","📁 EXPORTAR",
 ])
 
 # ─── TAB 1: OSCILOGRAMA ───────────────────────────────────────────────────────
@@ -1568,7 +1641,7 @@ with tab_diag:
           <div class="diag-title" style="color:#57c8ff;">✓ Modo de Habla Continua Detectado (Lectura / Conversación)</div>
           <div style="font-family:'Space Mono',monospace; font-size:1.15rem; font-weight:700; margin-bottom:6px; color:#e8e6e0;">FONACIÓN GENERAL ADAPTADA</div>
           <div style="font-size:0.84rem; color:#9a9aaa; line-height:1.5;">
-            <b>¿Por qué no hay alteración acústica alarmante?</b> El sistema detectó una melodía variada ($\sigma_{{F0}} = {la_init['f0_sd']:.1f}\\text{{ Hz}}$) 
+            <b>¿Por qué no hay alteración acústica alarmante?</b> El sistema detectó una melodía variada ($\sigma_{{F_0}} = {la_init['f0_sd']:.1f}\\text{{ Hz}}$) 
             y pausas temporales consistentes con el habla articulada. En este modo, <b>los indicadores de lesión de cuerdas vocales (como pólipos o nódulos) se desactivan</b> 
             por carecer de validez científica matemática para habla continua. Su indicador de periodicidad cepstral consolidada <b>CPP</b> es de <b>{vm_init['cpp']:.2f} dB</b>, 
             lo cual se correlaciona con una voz armónica y proyectada.
@@ -1792,7 +1865,7 @@ with tab_ling:
     tg_str=generate_textgrid(la_init['pauses'],la_init['syl_times'],len(y_sel)/sr)
     st.download_button("⬇ Descargar TextGrid (.TextGrid)",
         tg_str.encode('utf-8'),
-        f"{os.path.splitext(uploaded.name)[0]}.TextGrid",
+        f"{os.path.splitext(uploaded_active.name)[0]}.TextGrid",
         "text/plain")
 
 # ─── TAB 10: MFCC ────────────────────────────────────────────────────────────
@@ -1836,6 +1909,50 @@ with tab_spec2:
     cs2[1].markdown(mc("Curtosis",fmt(sm['kurtosis'],3),""),unsafe_allow_html=True)
     cs2[2].markdown(mc("Flatness",fmt(sm['flatness'],4),""),unsafe_allow_html=True)
 
+    # SECCIÓN NUEVA: ESTADÍSTICAS DESCRIPTIVAS AVANZADAS (PERCENTILES - PRAAT EQUIVALENT)
+    st.markdown("<hr class='sdiv'>", unsafe_allow_html=True)
+    st.markdown("#### 📊 Análisis de Distribución y Percentiles (Estadística de Modelado)")
+    st.markdown("""
+    Cálculo exacto del perfil estadístico descriptivo para la señal de voz seleccionada. 
+    Ideal para caracterizar la estabilidad de la fonación y el rango dinámico de entonación.
+    """)
+    
+    col_stat1, col_stat2 = st.columns(2)
+    
+    with col_stat1:
+        st.markdown("**Frecuencia Fundamental ($F_0$)**")
+        if len(voiced) > 3:
+            p_f0_10 = np.percentile(voiced, 10)
+            p_f0_25 = np.percentile(voiced, 25)
+            p_f0_50 = np.percentile(voiced, 50)
+            p_f0_75 = np.percentile(voiced, 75)
+            p_f0_90 = np.percentile(voiced, 90)
+            
+            df_f0_stats = pd.DataFrame({
+                "Métrica": ["Media", "Desv. Estándar (SD)", "Percentil 10 ($P_{10}$)", "Percentil 25 ($P_{25}$)", "Mediana ($P_{50}$)", "Percentil 75 ($P_{75}$)", "Percentil 90 ($P_{90}$)"],
+                "Valor": [f"{mf:.2f} Hz", f"{sf:.2f} Hz", f"{p_f0_10:.2f} Hz", f"{p_f0_25:.2f} Hz", f"{p_f0_50:.2f} Hz", f"{p_f0_75:.2f} Hz", f"{p_f0_90:.2f} Hz"]
+            })
+            st.dataframe(df_f0_stats, use_container_width=True, hide_index=True)
+        else:
+            st.info("Sin datos sonoros suficientes para extraer percentiles de $F_0$.")
+            
+    with col_stat2:
+        st.markdown("**Curva de Intensidad (dB)**")
+        if len(iv) > 3:
+            p_db_10 = np.percentile(iv, 10)
+            p_db_25 = np.percentile(iv, 25)
+            p_db_50 = np.percentile(iv, 50)
+            p_db_75 = np.percentile(iv, 75)
+            p_db_90 = np.percentile(iv, 90)
+            
+            df_db_stats = pd.DataFrame({
+                "Métrica": ["Media", "Desv. Estándar (SD)", "Percentil 10 ($P_{10}$)", "Percentil 25 ($P_{25}$)", "Mediana ($P_{50}$)", "Percentil 75 ($P_{75}$)", "Percentil 90 ($P_{90}$)"],
+                "Valor": [f"{np.mean(iv):.2f} dB", f"{np.std(iv):.2f} dB", f"{p_db_10:.2f} dB", f"{p_db_25:.2f} dB", f"{p_db_50:.2f} dB", f"{p_db_75:.2f} dB", f"{p_db_90:.2f} dB"]
+            })
+            st.dataframe(df_db_stats, use_container_width=True, hide_index=True)
+        else:
+            st.info("Sin datos de intensidad suficientes.")
+
     st.markdown("<hr class='sdiv'>", unsafe_allow_html=True); st.markdown("#### Curvas espectrales frame a frame")
     nff=2048; hff=512
     tf2=librosa.frames_to_time(
@@ -1858,35 +1975,62 @@ with tab_spec2:
     fig.update_xaxes(title_text="Tiempo (s)",row=3,col=1)
     st.plotly_chart(fig,use_container_width=True)
 
-# ─── TAB 12: FILTROS ─────────────────────────────────────────────────────────
+# ─── TAB 12: FILTROS Y RESÍNTESIS ─────────────────────────────────────────────
 with tab_filt:
-    st.markdown("### ✂️ Procesamiento de Señales / Filtros")
-    ft_=st.selectbox("Tipo",["Paso de banda","Paso bajo","Paso alto","Notch"])
-    fc1=st.number_input("Frec. 1 (Hz)",value=300.0,step=50.0,key="fc1")
-    fc2=st.number_input("Frec. 2 (Hz)",value=3400.0,step=50.0,key="fc2")
-    ford=st.slider("Orden",2,8,4,1)
+    st.markdown("### ✂️ Procesamiento de Señales, Filtros y Resíntesis")
+    
+    col_f1, col_f2 = st.columns(2)
+    
+    with col_f1:
+        st.markdown("#### 1. Filtros Analógicos (Butterworth)")
+        ft_=st.selectbox("Tipo de Filtro",["Ninguno","Paso de banda","Paso bajo","Paso alto","Notch"])
+        fc1=st.number_input("Frec. Corto 1 (Hz)",value=300.0,step=50.0,key="fc1")
+        fc2=st.number_input("Frec. Corto 2 (Hz)",value=3400.0,step=50.0,key="fc2")
+        ford=st.slider("Orden del Filtro",2,8,4,1)
+        
+    with col_f2:
+        st.markdown("#### 2. Resíntesis y Modulación (Vocoder/Pitch manipulation)")
+        st.markdown("""
+        Permite modular de forma independiente el Pitch ($F_0$) de la voz y el estiramiento temporal de la señal 
+        de manera matemática, simulando las funciones de manipulación PSOLA de Praat.
+        """)
+        p_shift = st.slider("Desplazar Pitch (Semitonos)", -12, 12, 0, 1, help="Valores positivos agudizan la voz; valores negativos la gravan.")
+        t_stretch = st.slider("Estirar Tiempo (Factor de velocidad)", 0.5, 2.0, 1.0, 0.1, help="1.0 es velocidad normal. Menor a 1 es más lento, mayor es más rápido.")
 
-    yf=bandpass(y_sel,sr,fc1,fc2,ford) if ft_ == "Paso de banda" else y_sel
-    if ft_ == "Paso bajo":
-        nyq=sr/2.0
-        sos=butter(ford,fc1/nyq,btype='low',output='sos')
-        yf=sosfiltfilt(sos,y_sel)
-    elif ft_ == "Paso alto":
-        nyq=sr/2.0
-        sos=butter(ford,fc1/nyq,btype='high',output='sos')
-        yf=sosfiltfilt(sos,y_sel)
-    elif ft_ == "Notch":
-        nyq=sr/2.0
-        bw=max(fc1*0.05,20.0); lo=max(1.0,fc1-bw); hi=min(nyq-1,fc1+bw)
-        sos=butter(ford,[lo/nyq,hi/nyq],btype='bandstop',output='sos')
-        yf=sosfiltfilt(sos,y_sel)
+    with st.spinner("Procesando señal y aplicando resíntesis..."):
+        # Filtros analógicos
+        yf=bandpass(y_sel,sr,fc1,fc2,ford) if ft_ == "Paso de banda" else y_sel.copy()
+        if ft_ == "Paso bajo":
+            nyq=sr/2.0
+            sos=butter(ford,fc1/nyq,btype='low',output='sos')
+            yf=sosfiltfilt(sos,y_sel)
+        elif ft_ == "Paso alto":
+            nyq=sr/2.0
+            sos=butter(ford,fc1/nyq,btype='high',output='sos')
+            yf=sosfiltfilt(sos,y_sel)
+        elif ft_ == "Notch":
+            nyq=sr/2.0
+            bw=max(fc1*0.05,20.0); lo=max(1.0,fc1-bw); hi=min(nyq-1,fc1+bw)
+            sos=butter(ford,[lo/nyq,hi/nyq],btype='bandstop',output='sos')
+            yf=sosfiltfilt(sos,y_sel)
+            
+        # Resíntesis acústica (Pitch / Duración)
+        if p_shift != 0:
+            yf = librosa.effects.pitch_shift(yf, sr=sr, n_steps=p_shift)
+        if t_stretch != 1.0:
+            yf = librosa.effects.time_stretch(yf, rate=t_stretch)
 
-    MP2=20000; st_=max(1,len(y_sel)//MP2)
-    fig=make_subplots(rows=2,cols=1,shared_xaxes=True,
-        subplot_titles=["Original","Filtrada"])
-    fig.add_trace(go.Scatter(x=t_sel[::st_],y=y_sel[::st_],mode="lines",
+    MP2=20000; st_orig=max(1,len(y_sel)//MP2); st_filt=max(1,len(yf)//MP2)
+    
+    # Nuevo eje temporal para la señal resintetizada/filtrada
+    duration_f = len(yf)/sr
+    t_synth = np.linspace(t0, t0 + duration_f, len(yf))
+    
+    fig=make_subplots(rows=2,cols=1,shared_xaxes=False,
+        subplot_titles=["Original","Filtrada / Resintetizada"])
+    fig.add_trace(go.Scatter(x=t_sel[::st_orig],y=y_sel[::st_orig],mode="lines",
         line=dict(color="#c8ff57",width=0.7)),row=1,col=1)
-    fig.add_trace(go.Scatter(x=t_sel[::st_],y=yf[::st_],mode="lines",
+    fig.add_trace(go.Scatter(x=t_synth[::st_filt],y=yf[::st_filt],mode="lines",
         line=dict(color="#57c8ff",width=0.7)),row=2,col=1)
     fig.update_layout(paper_bgcolor="#111115",plot_bgcolor="#0d0d0f",
         font=dict(family="DM Sans",color="#9a9aaa"),
@@ -1906,19 +2050,19 @@ with tab_filt:
         line=dict(color="#c8ff57",width=1,dash="dot"),name="Original"))
     fig2.add_trace(go.Scatter(x=frf[:fi2],y=pf[:fi2],mode="lines",
         line=dict(color="#57c8ff",width=1.5),name="Filtrada"))
-    pdk(fig2,"RESPUESTA ESPECTRAL: ORIGINAL vs FILTRADA",270)
+    pdk(fig2,"RESPUESTA ESPECTRAL: ORIGINAL vs FILTRADA/SINTETIZADA",270)
     fig2.update_xaxes(title_text="Hz"); fig2.update_yaxes(title_text="dB")
     st.plotly_chart(fig2,use_container_width=True)
     try:
         import soundfile as sf
         buf=io.BytesIO(); sf.write(buf,yf,sr,format="WAV",subtype="PCM_16")
-        st.download_button("⬇ Descargar audio filtrado (WAV)",buf.getvalue(),"audio_filtrado.wav","audio/wav")
+        st.download_button("⬇ Descargar audio filtrado/resintetizado (WAV)",buf.getvalue(),"audio_filtrado.wav","audio/wav")
     except ImportError:
         st.info("Instale `soundfile` para habilitar la descarga del audio filtrado.")
 
 # ─── TAB 13: EXPORTAR ────────────────────────────────────────────────────────
 with tab_exp:
-    st.markdown("### 📁 Exportar datos consolidados")
+    st.markdown("### 📁 Exportar datos consolidados del Archivo Activo")
     st.markdown('<div class="ibox">Exporta CSVs de análisis y TextGrid limpios de ruidos extraños.</div>',unsafe_allow_html=True)
     ca,cb=st.columns(2)
     with ca:
@@ -1944,7 +2088,7 @@ with tab_exp:
         st.download_button("⬇ Coeficientes MFCC",df_mfcc2.to_csv(index=False),"mfcc.csv","text/csv")
         
         summary=dict(
-            archivo=uploaded.name,duracion_s=f"{duration:.3f}",fs_hz=sr,
+            archivo=uploaded_active.name,duracion_s=f"{duration:.3f}",fs_hz=sr,
             f0_media=fmt(mf,1),f0_mediana=fmt(mdf,1),f0_min=fmt(mnf,1),f0_max=fmt(mxf,1),
             voiced_pct=fmt(vp,1),
             jitter_local=fmt(vm_init['jitter_local'],3),jitter_rap=fmt(vm_init['jitter_rap'],3),
