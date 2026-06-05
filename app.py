@@ -20,7 +20,7 @@ from scipy.ndimage import uniform_filter1d, median_filter
 st.set_page_config(page_title="PhonLab Pro", page_icon="🎙️",
                    layout="wide", initial_sidebar_state="expanded")
 
-# CSS Limpio y Seguro (No rompe los elementos estructurales de la barra lateral de Streamlit)
+# CSS Limpio y Seguro (Optimizado para Streamlit Community Cloud)
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght=400;700&family=DM+Sans:wght=300;400;600&display=swap');
@@ -205,6 +205,21 @@ h1, h2, h3, h4 {
     font-size: 0.78rem;
 }
 
+/* GARANTIZAR VISIBILIDAD DEL BOTÓN EXPANDIR (SIDEBAR TOGGLE) EN STREAMLIT CLOUD */
+[data-testid="stSidebarCollapsedControl"] {
+    background-color: #16161a !important;
+    border-radius: 0 8px 8px 0 !important;
+    border: 1px solid #2a2a35 !important;
+    border-left: none !important;
+    top: 12px !important;
+    left: 0px !important;
+}
+
+/* Forzar que el ícono interno del botón colapsado sea de nuestro color de acento */
+[data-testid="stSidebarCollapsedControl"] button {
+    color: #c8ff57 !important;
+}
+
 /* Estilos de pestañas (Tabs) */
 .stTabs [data-baseweb="tab-list"] {
     background: #111115;
@@ -263,10 +278,16 @@ h1, h2, h3, h4 {
     color: #9a9aaa;
 }
 
-/* Ocultar ÚNICAMENTE el menú de opciones de desarrollo y el footer, preservando el header del sidebar */
-[data-testid="stToolbar"], footer {
+/* Ocultar de forma segura el menú nativo y pie de página sin romper la barra de control superior */
+#MainMenu {
+    visibility: hidden;
+}
+footer {
     visibility: hidden !important;
     height: 0px !important;
+}
+[data-testid="stHeader"] {
+    background-color: transparent !important;
 }
 </style>
 """, unsafe_allow_html=True)
